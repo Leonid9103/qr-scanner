@@ -12,35 +12,45 @@
         }
         
         #reader { 
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw !important; 
-            height: 100vh !important;
+            position: fixed; top: 0; left: 0;
+            width: 100vw !important; height: 100vh !important;
         }
 
-        /* Улучшенное отображение видео на iPhone */
         #reader video { 
-            width: 100vw !important; 
-            height: 100vh !important; 
+            width: 100vw !important; height: 100vh !important; 
             object-fit: cover !important; 
         }
 
-        /* Центрирование рамки */
         #reader canvas {
-            width: 100vw !important;
-            height: 100vh !important;
+            width: 100vw !important; height: 100vh !important;
             object-fit: cover !important;
         }
 
         .hint {
-            position: fixed;
-            bottom: 50px;
+            position: fixed; bottom: 40px;
             left: 0; width: 100%;
-            text-align: center;
-            color: white;
-            z-index: 10;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            text-align: center; color: white;
+            z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             pointer-events: none;
+        }
+
+        /* Контейнер для зума */
+        .zoom-wrapper {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            z-index: 100;
+            display: none; /* Скрыт, пока не подтверждена поддержка зума */
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 20px;
+        }
+
+        #zoom-slider {
+            width: 100%;
+            accent-color: #248bcf;
         }
 
         #reader__header, #reader__dashboard, span { display: none !important; }
@@ -48,6 +58,11 @@
 </head>
 <body>
     <div id="reader"></div>
+    
+    <div class="zoom-wrapper" id="zoom-container">
+        <input type="range" id="zoom-slider" min="1" max="1" step="0.1" value="1">
+    </div>
+
     <div class="hint">Наведите камеру на QR-код</div>
 
     <audio id="beep" src="https://www.soundjay.com/buttons/beep-07a.wav" preload="auto"></audio>
@@ -55,11 +70,12 @@
     <script>
         const tg = window.Telegram.WebApp;
         const beep = document.getElementById("beep");
+        const zoomContainer = document.getElementById("zoom-container");
+        const zoomSlider = document.getElementById("zoom-slider");
+        
         tg.expand();
 
-        // Размер рамки: 70% от ширины, но не более 250px
         const boxSize = Math.min(window.innerWidth * 0.7, 250);
-
         const html5QrCode = new Html5Qrcode("reader");
         
         const config = { 
@@ -72,21 +88,37 @@
             { facingMode: "environment" }, 
             config,
             (decodedText) => {
-                // 1. Звук
                 try { beep.play(); } catch(e) {}
-                
-                // 2. Вибрация (Telegram Haptic)
-                if (tg.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-
-                // 3. Отправка данных боту
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 tg.sendData(decodedText);
                 tg.close();
             }
-        ).catch(err => {
+        ).then(() => {
+            // Инициализация зума после успешного запуска камеры
+            const videoElement = document.querySelector('#reader video');
+            if (videoElement) {
+                const stream = videoElement.srcObject;
+                const track = stream.getVideoTracks()[0];
+                const capabilities = track.getCapabilities();
+
+                // Проверяем, поддерживает ли камера зум
+                if (capabilities && capabilities.zoom) {
+                    zoomContainer.style.display = "block";
+                    zoomSlider.min = capabilities.zoom.min;
+                    zoomSlider.max = capabilities.zoom.max;
+                    zoomSlider.step = capabilities.zoom.step;
+                    zoomSlider.value = capabilities.zoom.min;
+
+                    zoomSlider.addEventListener('input', () => {
+                        track.applyConstraints({
+                            advanced: [{ zoom: zoomSlider.value }]
+                        });
+                    });
+                }
+            }
+        }).catch(err => {
             console.error("Ошибка камеры:", err);
-            alert("Пожалуйста, разрешите доступ к камере в настройках браузера/Telegram.");
+            alert("Пожалуйста, разрешите доступ к камере.");
         });
     </script>
 </body>
