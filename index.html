@@ -1,65 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #000; overflow: hidden; 
+            background: #000; overflow: hidden; font-family: sans-serif;
         }
         
-        /* Главный контейнер на весь экран */
         #reader { 
             position: fixed;
-            top: 0;
-            left: 0;
+            top: 0; left: 0;
             width: 100vw !important; 
             height: 100vh !important;
         }
 
-        /* Заставляем само ВИДЕО игнорировать свои пропорции и заливать экран */
+        /* Улучшенное отображение видео на iPhone */
         #reader video { 
             width: 100vw !important; 
             height: 100vh !important; 
             object-fit: cover !important; 
         }
 
-        /* Окошко сканера (canvas поверх видео) */
+        /* Центрирование рамки */
         #reader canvas {
             width: 100vw !important;
             height: 100vh !important;
             object-fit: cover !important;
         }
 
-        /* Убираем все интерфейсные надписи библиотеки */
+        .hint {
+            position: fixed;
+            bottom: 50px;
+            left: 0; width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 10;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+
         #reader__header, #reader__dashboard, span { display: none !important; }
     </style>
 </head>
 <body>
     <div id="reader"></div>
+    <div class="hint">Наведите камеру на QR-код</div>
+
+    <audio id="beep" src="https://www.soundjay.com/buttons/beep-07a.wav" preload="auto"></audio>
+
     <script>
         const tg = window.Telegram.WebApp;
+        const beep = document.getElementById("beep");
         tg.expand();
 
-        // Настройка размера квадрата: 250px или 70% ширины
+        // Размер рамки: 70% от ширины, но не более 250px
         const boxSize = Math.min(window.innerWidth * 0.7, 250);
 
         const html5QrCode = new Html5Qrcode("reader");
         
+        const config = { 
+            fps: 20, 
+            qrbox: { width: boxSize, height: boxSize },
+            aspectRatio: window.innerWidth / window.innerHeight
+        };
+
         html5QrCode.start(
             { facingMode: "environment" }, 
-            { 
-                fps: 20, // Больше кадров для скорости
-                qrbox: { width: boxSize, height: boxSize },
-                // Не ограничиваем aspectRatio здесь, даем CSS сделать object-fit: cover
-            },
+            config,
             (decodedText) => {
+                // 1. Звук
+                try { beep.play(); } catch(e) {}
+                
+                // 2. Вибрация (Telegram Haptic)
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+
+                // 3. Отправка данных боту
                 tg.sendData(decodedText);
                 tg.close();
             }
         ).catch(err => {
-            console.error(err);
+            console.error("Ошибка камеры:", err);
+            alert("Пожалуйста, разрешите доступ к камере в настройках браузера/Telegram.");
         });
     </script>
 </body>
