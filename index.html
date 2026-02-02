@@ -9,6 +9,7 @@
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
             background: #000; overflow: hidden; font-family: sans-serif;
+            -webkit-user-select: none; user-select: none;
         }
         
         #reader { 
@@ -26,41 +27,60 @@
             object-fit: cover !important;
         }
 
+        /* Контейнер управления зумом */
+        .controls-container {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            z-index: 100;
+            display: none; /* Покажется, если зум поддерживается */
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 30px;
+            text-align: center;
+        }
+
+        #zoom-slider {
+            width: 100%;
+            height: 10px;
+            -webkit-appearance: none;
+            background: #444;
+            outline: none;
+            border-radius: 5px;
+        }
+
+        #zoom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #0088cc;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
         .hint {
             position: fixed; bottom: 40px;
             left: 0; width: 100%;
             text-align: center; color: white;
             z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             pointer-events: none;
+            font-size: 14px;
         }
 
-        /* Контейнер для зума */
-        .zoom-wrapper {
-            position: fixed;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 70%;
-            z-index: 100;
-            display: none; /* Скрыт, пока не подтверждена поддержка зума */
-            background: rgba(0,0,0,0.5);
-            padding: 10px;
-            border-radius: 20px;
+        /* Скрываем мусор от библиотеки */
+        #reader__header, #reader__dashboard, span, button#html5-qrcode-button-camera-stop { 
+            display: none !important; 
         }
-
-        #zoom-slider {
-            width: 100%;
-            accent-color: #248bcf;
-        }
-
-        #reader__header, #reader__dashboard, span { display: none !important; }
     </style>
 </head>
 <body>
     <div id="reader"></div>
     
-    <div class="zoom-wrapper" id="zoom-container">
+    <div class="controls-container" id="zoom-controls">
         <input type="range" id="zoom-slider" min="1" max="1" step="0.1" value="1">
+        <div style="color: #0088cc; font-size: 12px; margin-top: 8px; font-weight: bold;">ЗУМ</div>
     </div>
 
     <div class="hint">Наведите камеру на QR-код</div>
@@ -70,7 +90,7 @@
     <script>
         const tg = window.Telegram.WebApp;
         const beep = document.getElementById("beep");
-        const zoomContainer = document.getElementById("zoom-container");
+        const zoomControls = document.getElementById("zoom-controls");
         const zoomSlider = document.getElementById("zoom-slider");
         
         tg.expand();
@@ -79,7 +99,7 @@
         const html5QrCode = new Html5Qrcode("reader");
         
         const config = { 
-            fps: 20, 
+            fps: 25, 
             qrbox: { width: boxSize, height: boxSize },
             aspectRatio: window.innerWidth / window.innerHeight
         };
@@ -94,31 +114,39 @@
                 tg.close();
             }
         ).then(() => {
-            // Инициализация зума после успешного запуска камеры
-            const videoElement = document.querySelector('#reader video');
-            if (videoElement) {
-                const stream = videoElement.srcObject;
-                const track = stream.getVideoTracks()[0];
-                const capabilities = track.getCapabilities();
+            // Инициализация зума с задержкой для корректной работы на Android
+            setTimeout(() => {
+                try {
+                    const videoElement = document.querySelector('#reader video');
+                    if (videoElement && videoElement.srcObject) {
+                        const track = videoElement.srcObject.getVideoTracks()[0];
+                        
+                        if (track.getCapabilities) {
+                            const capabilities = track.getCapabilities();
+                            
+                            // Проверяем поддержку зума устройством
+                            if (capabilities.zoom) {
+                                zoomControls.style.display = "block";
+                                zoomSlider.min = capabilities.zoom.min;
+                                zoomSlider.max = capabilities.zoom.max;
+                                zoomSlider.step = capabilities.zoom.step || 0.1;
+                                zoomSlider.value = capabilities.zoom.min;
 
-                // Проверяем, поддерживает ли камера зум
-                if (capabilities && capabilities.zoom) {
-                    zoomContainer.style.display = "block";
-                    zoomSlider.min = capabilities.zoom.min;
-                    zoomSlider.max = capabilities.zoom.max;
-                    zoomSlider.step = capabilities.zoom.step;
-                    zoomSlider.value = capabilities.zoom.min;
-
-                    zoomSlider.addEventListener('input', () => {
-                        track.applyConstraints({
-                            advanced: [{ zoom: zoomSlider.value }]
-                        });
-                    });
+                                zoomSlider.addEventListener('input', () => {
+                                    track.applyConstraints({
+                                        advanced: [{ zoom: parseFloat(zoomSlider.value) }]
+                                    });
+                                });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Зум не поддерживается:", e);
                 }
-            }
+            }, 800); // Увеличенная задержка для тяжелых камер
         }).catch(err => {
-            console.error("Ошибка камеры:", err);
-            alert("Пожалуйста, разрешите доступ к камере.");
+            console.error("Ошибка запуска:", err);
+            alert("Камера недоступна. Проверьте разрешения.");
         });
     </script>
 </body>
