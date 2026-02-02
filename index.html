@@ -8,18 +8,32 @@
             margin: 0; padding: 0; width: 100%; height: 100%; 
             background: #000; overflow: hidden; 
         }
+        
+        /* Главный контейнер на весь экран */
         #reader { 
-            width: 100vw; height: 100vh; 
-            display: flex; justify-content: center; align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw !important; 
+            height: 100vh !important;
         }
-        /* Исправление для iOS: заставляем видео заполнять контейнер */
+
+        /* Заставляем само ВИДЕО игнорировать свои пропорции и заливать экран */
         #reader video { 
+            width: 100vw !important; 
+            height: 100vh !important; 
             object-fit: cover !important; 
-            width: 100% !important; 
-            height: 100% !important; 
         }
-        /* Убираем лишние элементы интерфейса библиотеки */
-        #reader__header, #reader__dashboard { display: none !important; }
+
+        /* Окошко сканера (canvas поверх видео) */
+        #reader canvas {
+            width: 100vw !important;
+            height: 100vh !important;
+            object-fit: cover !important;
+        }
+
+        /* Убираем все интерфейсные надписи библиотеки */
+        #reader__header, #reader__dashboard, span { display: none !important; }
     </style>
 </head>
 <body>
@@ -28,28 +42,23 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Оптимальный размер окна сканирования
-        const screenSize = Math.min(window.innerWidth, window.innerHeight);
-        const qrBoxSize = Math.floor(screenSize * 0.7);
+        // Настройка размера квадрата: 250px или 70% ширины
+        const boxSize = Math.min(window.innerWidth * 0.7, 250);
 
         const html5QrCode = new Html5Qrcode("reader");
         
-        const config = { 
-            fps: 10, 
-            qrbox: { width: qrBoxSize, height: qrBoxSize },
-            // ВАЖНО для iPhone: устанавливаем соотношение сторон 1:1 или под экран
-            aspectRatio: window.innerWidth / window.innerHeight 
-        };
-
         html5QrCode.start(
             { facingMode: "environment" }, 
-            config,
+            { 
+                fps: 20, // Больше кадров для скорости
+                qrbox: { width: boxSize, height: boxSize },
+                // Не ограничиваем aspectRatio здесь, даем CSS сделать object-fit: cover
+            },
             (decodedText) => {
                 tg.sendData(decodedText);
                 tg.close();
             }
         ).catch(err => {
-            // Если ошибка, пробуем запустить без aspectRatio
             console.error(err);
         });
     </script>
