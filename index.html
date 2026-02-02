@@ -27,50 +27,59 @@
             object-fit: cover !important;
         }
 
-        /* Контейнер управления зумом */
-        .controls-container {
+        /* Контейнер зума прямо под квадратом */
+        .zoom-controls {
             position: fixed;
-            bottom: 90px;
+            /* Центрируем по вертикали и смещаем вниз на половину размера qrbox + запас */
+            top: calc(50% + 140px); 
             left: 50%;
             transform: translateX(-50%);
-            width: 80%;
+            width: 250px; /* Ширина совпадает с макс. шириной qrbox */
             z-index: 100;
-            display: none; /* Покажется, если зум поддерживается */
-            background: rgba(0, 0, 0, 0.6);
-            padding: 15px;
-            border-radius: 30px;
+            display: none; 
             text-align: center;
         }
 
         #zoom-slider {
             width: 100%;
-            height: 10px;
+            height: 30px; /* Увеличили область нажатия */
             -webkit-appearance: none;
-            background: #444;
+            background: transparent;
             outline: none;
-            border-radius: 5px;
         }
 
+        /* Стилизация дорожки ползунка */
+        #zoom-slider::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+        }
+
+        /* Стилизация "ручки" ползунка */
         #zoom-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 25px;
-            height: 25px;
-            background: #0088cc;
+            height: 20px;
+            width: 20px;
             border-radius: 50%;
+            background: #0088cc;
             cursor: pointer;
+            margin-top: -8px; /* Выравнивание по центру дорожки */
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
 
         .hint {
-            position: fixed; bottom: 40px;
+            position: fixed; 
+            bottom: 40px;
             left: 0; width: 100%;
             text-align: center; color: white;
             z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
             pointer-events: none;
             font-size: 14px;
+            opacity: 0.8;
         }
 
-        /* Скрываем мусор от библиотеки */
-        #reader__header, #reader__dashboard, span, button#html5-qrcode-button-camera-stop { 
+        #reader__header, #reader__dashboard, span, button { 
             display: none !important; 
         }
     </style>
@@ -78,24 +87,26 @@
 <body>
     <div id="reader"></div>
     
-    <div class="controls-container" id="zoom-controls">
+    <div class="zoom-controls" id="zoom-wrap">
         <input type="range" id="zoom-slider" min="1" max="1" step="0.1" value="1">
-        <div style="color: #0088cc; font-size: 12px; margin-top: 8px; font-weight: bold;">ЗУМ</div>
+        <div style="color: white; font-size: 10px; margin-top: 5px; letter-spacing: 2px;">ZOOM</div>
     </div>
 
-    <div class="hint">Наведите камеру на QR-код</div>
+    <div class="hint">Поместите код в квадрат</div>
 
     <audio id="beep" src="https://www.soundjay.com/buttons/beep-07a.wav" preload="auto"></audio>
 
     <script>
         const tg = window.Telegram.WebApp;
         const beep = document.getElementById("beep");
-        const zoomControls = document.getElementById("zoom-controls");
+        const zoomWrap = document.getElementById("zoom-wrap");
         const zoomSlider = document.getElementById("zoom-slider");
         
         tg.expand();
 
-        const boxSize = Math.min(window.innerWidth * 0.7, 250);
+        // Фиксируем размер квадрата для точного позиционирования ползунка
+        const boxSize = 250; 
+
         const html5QrCode = new Html5Qrcode("reader");
         
         const config = { 
@@ -114,39 +125,31 @@
                 tg.close();
             }
         ).then(() => {
-            // Инициализация зума с задержкой для корректной работы на Android
+            // Ожидание инициализации камеры на Android
             setTimeout(() => {
-                try {
-                    const videoElement = document.querySelector('#reader video');
-                    if (videoElement && videoElement.srcObject) {
-                        const track = videoElement.srcObject.getVideoTracks()[0];
-                        
-                        if (track.getCapabilities) {
-                            const capabilities = track.getCapabilities();
-                            
-                            // Проверяем поддержку зума устройством
-                            if (capabilities.zoom) {
-                                zoomControls.style.display = "block";
-                                zoomSlider.min = capabilities.zoom.min;
-                                zoomSlider.max = capabilities.zoom.max;
-                                zoomSlider.step = capabilities.zoom.step || 0.1;
-                                zoomSlider.value = capabilities.zoom.min;
+                const video = document.querySelector('#reader video');
+                if (video && video.srcObject) {
+                    const track = video.srcObject.getVideoTracks()[0];
+                    if (track.getCapabilities) {
+                        const caps = track.getCapabilities();
+                        if (caps.zoom) {
+                            zoomWrap.style.display = "block";
+                            zoomSlider.min = caps.zoom.min;
+                            zoomSlider.max = caps.zoom.max;
+                            zoomSlider.step = caps.zoom.step || 0.1;
+                            zoomSlider.value = caps.zoom.min;
 
-                                zoomSlider.addEventListener('input', () => {
-                                    track.applyConstraints({
-                                        advanced: [{ zoom: parseFloat(zoomSlider.value) }]
-                                    });
+                            zoomSlider.addEventListener('input', () => {
+                                track.applyConstraints({
+                                    advanced: [{ zoom: parseFloat(zoomSlider.value) }]
                                 });
-                            }
+                            });
                         }
                     }
-                } catch (e) {
-                    console.error("Зум не поддерживается:", e);
                 }
-            }, 800); // Увеличенная задержка для тяжелых камер
+            }, 1000); 
         }).catch(err => {
-            console.error("Ошибка запуска:", err);
-            alert("Камера недоступна. Проверьте разрешения.");
+            console.error(err);
         });
     </script>
 </body>
